@@ -1,13 +1,13 @@
 
-function health(_request: Request) {
+function getHealth(_request: Request) {
     return new Response(null)
 }
 
-function readiness(_request: Request) {
+function getReadiness(_request: Request) {
     return new Response(null)
 }
 
-function connections(_request: Request) {
+function getConnections(_request: Request) {
     return new Response(null)
 }
 
@@ -19,7 +19,8 @@ function notFound(_request: Request) {
 
 function router(routes) {
     return async function handler(request) {
-        return (routes[new URL(request.url).pathname] ?? notFound)(request)
+        const requestPattern = `${request.method} ${new URL(request.url).pathname}`
+        return (routes[requestPattern] ?? notFound)(request)
     }
 }
 
@@ -27,8 +28,8 @@ Deno.serve({
     hostname: "0.0.0.0",
     port: 8080,
     handler: router({
-        "/healthz": health,
-        "/readiness": readiness,
-        "/connections": connections
+        "GET /healthz": getHealth,
+        "GET /readiness": getReadiness,
+        "GET /connections": getConnections
     })
 })
