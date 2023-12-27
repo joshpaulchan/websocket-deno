@@ -140,7 +140,7 @@ export const handler = router({
     "GET /readiness": getReadiness,
     "GET /connections": getConnections,
     "DELETE /connections": closeConnection,
-    "GET /": establishWebsocket,
+    "GET /websocket": establishWebsocket,
 })
 
 const httpServer = Deno.serve({
@@ -163,7 +163,7 @@ async function handle(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
         increment(METRICS, "ws_server.request_event", 1)
-        await requestEvent.respondWith(establishWebsocket(requestEvent.request));
+        await requestEvent.respondWith(handler(requestEvent.request));
         increment(METRICS, "ws_server.request_event", -1)
     }
 }
