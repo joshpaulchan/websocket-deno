@@ -36,7 +36,7 @@ async function closeConnection(req: Request): Response {
 
 
 class WebsocketManager {
-    constructor(heartbeatIntervalSeconds=5) {
+    constructor(heartbeatIntervalSeconds=60) {
         this.sockets = new Map()
         this.latestID = 1
         this.heartBeatInterval = setInterval(this.sendHeartBeats.bind(this), heartbeatIntervalSeconds*1000)
