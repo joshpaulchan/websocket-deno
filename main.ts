@@ -104,6 +104,20 @@ class WebsocketManager {
     }
 }
 
+// NOTE: this could probably be a middleware that upgrades + register sockets based on header.
+function establishWebsocket(_request: Request): Response {
+    const upgrade = _request.headers.get("upgrade") || "";
+    if (upgrade.toLowerCase() != "websocket") {
+        return new Response("request isn't trying to upgrade to websocket.");
+    }
+
+    increment(METRICS, "ws_server.tcp_conn.upgrades", 1)
+    const { socket, response } = Deno.upgradeWebSocket(_request);
+    websocketManager.register(socket)
+
+    return response;
+}
+
 function notFound(_request: Request): Response {
     return new Response(null, {
         status: 404
@@ -126,6 +140,7 @@ export const handler = router({
     "GET /readiness": getReadiness,
     "GET /connections": getConnections,
     "DELETE /connections": closeConnection,
+    "GET /": establishWebsocket,
 })
 
 const httpServer = Deno.serve({
@@ -134,7 +149,10 @@ const httpServer = Deno.serve({
     handler
 })
 
-let websocketManager = new WebsocketManager() 
+let websocketManager = new WebsocketManager()
+// NOTE: this dedicated server may not be necessary, but may be useful for:
+// - splitting event loops(if you can have more than 1 in deno an)
+// - instrumenting some of the lower level bits
 const webSocketServer = Deno.listen({
     hostname: "0.0.0.0",
     port: 8081,
@@ -145,7 +163,7 @@ async function handle(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
         increment(METRICS, "ws_server.request_event", 1)
-        await requestEvent.respondWith(handleReq(requestEvent.request));
+        await requestEvent.respondWith(establishWebsocket(requestEvent.request));
         increment(METRICS, "ws_server.request_event", -1)
     }
 }
@@ -154,15 +172,4 @@ for await (const conn of webSocketServer) {
     increment(METRICS, "ws_server.tcp_conn.active", 1)
     handle(conn);
     increment(METRICS, "ws_server.tcp_conn.active", -1)
-}
-  
-function handleReq(req: Request): Response {
-    const upgrade = req.headers.get("upgrade") || "";
-    if (upgrade.toLowerCase() != "websocket") {
-        return new Response("request isn't trying to upgrade to websocket.");
-    }
-    increment(METRICS, "ws_server.tcp_conn.upgrades", 1)
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    websocketManager.register(socket)
-    return response;
 }
