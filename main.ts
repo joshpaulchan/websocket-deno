@@ -46,6 +46,8 @@ class WebsocketManager {
         this.sockets.forEach((socket, key) => sendHeartBeat(key, false))
     }
 
+    // TODO: don't actually know if I should be sending pongs, or it's already handled by Deno as part of implementing the websocket spec
+    // probably fine to keep for now
     sendPong(id, prompted) {
         const socket = this.sockets.get(id)
         if (!socket) {
