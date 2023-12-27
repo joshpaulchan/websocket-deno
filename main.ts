@@ -47,7 +47,7 @@ class WebsocketManager {
         this.sockets.forEach((socket, key) => sendHeartBeat(key, false))
     }
 
-    sendPong(id, wasPrompted) {
+    sendPong(id, prompted) {
         const socket = this.sockets.get(id)
         if (!socket) {
             return
@@ -57,7 +57,7 @@ class WebsocketManager {
             id: null,
             type: "PONG",
             attributes: {
-                unprompted: !wasPrompted
+                prompted
             }
         }))
     }
@@ -68,16 +68,22 @@ class WebsocketManager {
 
     register(socket) {
         increment(METRICS, "ws_server.websockets.active", 1)
-        socket.onopen = () => console.log("socket opened");
-        socket.onmessage = (e) => {
-            console.log("socket message:", e.data);
-            socket.send(new Date().toString());
-        };
-
         const id = this.latestID + 1
         this.latestID += id
 
         this.sockets.set(id, socket)
+
+        socket.onopen = () => console.log("socket opened");
+
+        const pong = this.sendPong.bind(this)
+        socket.onmessage = (e) => {
+            console.log("socket message:", e.data, e.origin, e.source);
+            if (JSON.parse(e.data).type === "ping") {
+                pong(id, true)
+                return
+            }
+            socket.send(new Date().toString());
+        };
 
         const unregister = this.unregister.bind(this, id)
         socket.onerror = (e) => {
@@ -91,7 +97,7 @@ class WebsocketManager {
         increment(METRICS, "ws_server.websockets.active", -1)
         const socket = this.sockets.get(id)
         // state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
-        if (socket != null && socket.readyState < 2) {
+        if (socket != null) {
             socket.close()
         }
         this.sockets.delete(id)
@@ -136,16 +142,18 @@ const webSocketServer = Deno.listen({
 })
 
 async function handle(conn: Deno.Conn) {
-    increment(METRICS, "ws_server.tcp_conn.active", 1)
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
+        increment(METRICS, "ws_server.request_event", 1)
         await requestEvent.respondWith(handleReq(requestEvent.request));
+        increment(METRICS, "ws_server.request_event", -1)
     }
-    increment(METRICS, "ws_server.tcp_conn.active", -1)
 }
 
 for await (const conn of webSocketServer) {
+    increment(METRICS, "ws_server.tcp_conn.active", 1)
     handle(conn);
+    increment(METRICS, "ws_server.tcp_conn.active", -1)
 }
   
 function handleReq(req: Request): Response {
