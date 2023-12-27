@@ -34,7 +34,6 @@ async function closeConnection(req: Request): Response {
     })
 }
 
-
 class WebsocketManager {
     constructor(heartbeatIntervalSeconds=60) {
         this.sockets = new Map()
@@ -85,7 +84,7 @@ class WebsocketManager {
             socket.send(new Date().toString());
         };
 
-        const unregister = this.unregister.bind(this, id)
+        const unregister = this.unregister.bind(this)
         socket.onerror = (e) => {
             console.log("socket errored:", e)
             unregister(id)
@@ -131,7 +130,7 @@ type RouterConfig = {
 function router(routes: RouterConfig) {
     return async function handler(request: Request): Promise<Response> {
         const requestPattern = `${request.method} ${new URL(request.url).pathname}`
-        return (routes[requestPattern] ?? notFound)(request)
+        return await (routes[requestPattern] ?? notFound)(request)
     }
 }
 
