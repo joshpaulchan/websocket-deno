@@ -24,6 +24,80 @@ function getConnections(_request: Request): Response {
     })
 }
 
+async function closeConnection(req: Request): Response {
+    websocketManager.unregister(await req.json().id)
+    return new Response(null, {
+        status: 204,
+        headers: {
+            "Content-Type": "application/json"
+        }
+    })
+}
+
+
+class WebsocketManager {
+    constructor(heartbeatIntervalSeconds=5) {
+        this.sockets = new Map()
+        this.latestID = 1
+        this.heartBeatInterval = setInterval(this.sendHeartBeats.bind(this), heartbeatIntervalSeconds*1000)
+    }
+
+    sendHeartBeats() {
+        const sendHeartBeat = this.sendPong.bind(this)
+        this.sockets.forEach((socket, key) => sendHeartBeat(key, false))
+    }
+
+    sendPong(id, wasPrompted) {
+        const socket = this.sockets.get(id)
+        if (!socket) {
+            return
+        }
+
+        socket.send(JSON.stringify({
+            id: null,
+            type: "PONG",
+            attributes: {
+                unprompted: !wasPrompted
+            }
+        }))
+    }
+
+    drain() {
+        this.sockets.forEach((socket, key) => this.unregister(key))
+    }
+
+    register(socket) {
+        increment(METRICS, "ws_server.websockets.active", 1)
+        socket.onopen = () => console.log("socket opened");
+        socket.onmessage = (e) => {
+            console.log("socket message:", e.data);
+            socket.send(new Date().toString());
+        };
+
+        const id = this.latestID + 1
+        this.latestID += id
+
+        this.sockets.set(id, socket)
+
+        const unregister = this.unregister.bind(this, id)
+        socket.onerror = (e) => {
+            console.log("socket errored:", e)
+            unregister(id)
+        };
+        socket.onclose = () => unregister(id);
+    }
+
+    unregister(id) {
+        increment(METRICS, "ws_server.websockets.active", -1)
+        const socket = this.sockets.get(id)
+        // state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
+        if (socket != null && socket.readyState < 2) {
+            socket.close()
+        }
+        this.sockets.delete(id)
+    }
+}
+
 function notFound(_request: Request): Response {
     return new Response(null, {
         status: 404
@@ -44,7 +118,8 @@ function router(routes: RouterConfig) {
 export const handler = router({
     "GET /healthz": getHealth,
     "GET /readiness": getReadiness,
-    "GET /connections": getConnections
+    "GET /connections": getConnections,
+    "DELETE /connections": closeConnection,
 })
 
 const httpServer = Deno.serve({
@@ -53,6 +128,7 @@ const httpServer = Deno.serve({
     handler
 })
 
+let websocketManager = new WebsocketManager() 
 const webSocketServer = Deno.listen({
     hostname: "0.0.0.0",
     port: 8081,
@@ -79,12 +155,6 @@ function handleReq(req: Request): Response {
     }
     increment(METRICS, "ws_server.tcp_conn.upgrades", 1)
     const { socket, response } = Deno.upgradeWebSocket(req);
-    socket.onopen = () => console.log("socket opened");
-    socket.onmessage = (e) => {
-        console.log("socket message:", e.data);
-        socket.send(new Date().toString());
-    };
-    socket.onerror = (e) => console.log("socket errored:", e);
-    socket.onclose = () => console.log("socket closed");
+    websocketManager.register(socket)
     return response;
 }
