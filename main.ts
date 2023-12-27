@@ -1,35 +1,41 @@
 
-function getHealth(_request: Request) {
+function getHealth(_request: Request): Response {
     return new Response(null)
 }
 
-function getReadiness(_request: Request) {
+function getReadiness(_request: Request): Response {
     return new Response(null)
 }
 
-function getConnections(_request: Request) {
+function getConnections(_request: Request): Response {
     return new Response(null)
 }
 
-function notFound(_request: Request) {
+function notFound(_request: Request): Response {
     return new Response(null, {
         status: 404
     })
 }
 
-function router(routes) {
-    return async function handler(request) {
+type RouterConfig = {
+    [key: string]: (request: Request) => Response;
+  };
+
+function router(routes: RouterConfig) {
+    return async function handler(request: Request): Promise<Response> {
         const requestPattern = `${request.method} ${new URL(request.url).pathname}`
         return (routes[requestPattern] ?? notFound)(request)
     }
 }
 
+export const handler = router({
+    "GET /healthz": getHealth,
+    "GET /readiness": getReadiness,
+    "GET /connections": getConnections
+})
+
 Deno.serve({
     hostname: "0.0.0.0",
     port: 8080,
-    handler: router({
-        "GET /healthz": getHealth,
-        "GET /readiness": getReadiness,
-        "GET /connections": getConnections
-    })
+    handler
 })
