@@ -7,8 +7,19 @@ function getReadiness(_request: Request): Response {
     return new Response(null)
 }
 
+let WEBSOCKETS: Map = new Map([])
 function getConnections(_request: Request): Response {
-    return new Response(null)
+    const body = JSON.stringify({
+        ts: new Date(),
+        attributes: {
+            websockets: WEBSOCKETS.size
+        }
+    })
+    return new Response(body, {
+        headers: {
+            "Content-Type": "application/json"
+        }
+    })
 }
 
 function notFound(_request: Request): Response {
