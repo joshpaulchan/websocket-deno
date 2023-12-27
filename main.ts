@@ -7,13 +7,15 @@ function getReadiness(_request: Request): Response {
     return new Response(null)
 }
 
-let WEBSOCKETS: Map = new Map([])
+let METRICS: Map = new Map([])
+function increment(map, key, amount = 1, _default = 0) {
+    map.set(key, (map.get(key) ?? _default) + amount)
+}
+
 function getConnections(_request: Request): Response {
     const body = JSON.stringify({
         ts: new Date(),
-        attributes: {
-            websockets: WEBSOCKETS.size
-        }
+        attributes: Object.fromEntries(METRICS.entries())
     })
     return new Response(body, {
         headers: {
@@ -58,10 +60,12 @@ const webSocketServer = Deno.listen({
 })
 
 async function handle(conn: Deno.Conn) {
+    increment(METRICS, "ws_server.tcp_conn.active", 1)
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
         await requestEvent.respondWith(handleReq(requestEvent.request));
     }
+    increment(METRICS, "ws_server.tcp_conn.active", -1)
 }
 
 for await (const conn of webSocketServer) {
@@ -73,6 +77,7 @@ function handleReq(req: Request): Response {
     if (upgrade.toLowerCase() != "websocket") {
         return new Response("request isn't trying to upgrade to websocket.");
     }
+    increment(METRICS, "ws_server.tcp_conn.upgrades", 1)
     const { socket, response } = Deno.upgradeWebSocket(req);
     socket.onopen = () => console.log("socket opened");
     socket.onmessage = (e) => {
