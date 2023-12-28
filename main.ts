@@ -119,6 +119,28 @@ function establishWebsocket(_request: Request): Response {
     return response;
 }
 
+function sse(_request: Request): Response {
+    let timerId: number | undefined;
+    const msg = new TextEncoder().encode(_request.url);
+    const body = new ReadableStream({
+        start(controller) {
+            timerId = setInterval(() => {
+                controller.enqueue(msg);
+            }, 1000);
+        },
+        cancel() {
+            if (typeof timerId === "number") {
+                clearInterval(timerId);
+            }
+        },
+    });
+    return new Response(body, {
+        headers: {
+            "Content-Type": "text/event-stream",
+        },
+    });
+}
+
 function notFound(_request: Request): Response {
     return new Response(null, {
         status: 404
@@ -144,6 +166,7 @@ export const handler = router({
 
     // websocket upgrade requests start as GETs
     "GET /websocket": establishWebsocket,
+    "GET /sse": sse,
 })
 
 const httpServer = Deno.serve({
