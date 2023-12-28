@@ -46,8 +46,8 @@ class WebsocketManager {
         this.sockets.forEach((socket, key) => sendHeartBeat(key, false))
     }
 
-    // TODO: don't actually know if I should be sending pongs, or it's already handled by Deno as part of implementing the websocket spec
-    // probably fine to keep for now
+    // I shouldn't actually need to sending pongs, those frames should be implemented
+    // as part of the websocket protocol
     sendPong(id, prompted) {
         const socket = this.sockets.get(id)
         if (!socket) {
@@ -141,6 +141,8 @@ export const handler = router({
     "GET /readiness": getReadiness,
     "GET /connections": getConnections,
     "DELETE /connections": closeConnection,
+
+    // websocket upgrade requests start as GETs
     "GET /websocket": establishWebsocket,
 })
 
