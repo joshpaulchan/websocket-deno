@@ -124,11 +124,13 @@ function sse(_request: Request): Response {
     const msg = new TextEncoder().encode(_request.url);
     const body = new ReadableStream({
         start(controller) {
+            increment(METRICS, "server.sse.active", 1)
             timerId = setInterval(() => {
                 controller.enqueue(msg);
             }, 1000);
         },
         cancel() {
+            increment(METRICS, "server.sse.active", -1)
             if (typeof timerId === "number") {
                 clearInterval(timerId);
             }
