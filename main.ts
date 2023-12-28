@@ -34,6 +34,24 @@ async function closeConnection(req: Request): Response {
     })
 }
 
+function nackMessage(e, socket) {
+    socket.send(JSON.stringify({
+        type: "nack",
+        attributes: {
+            ts: new Date()
+        }
+    }))
+}
+
+// maybe I should be passing socket ID around instead and interfacing thru manager? 🤷
+function messageRouter(socket, routes, defaultHandler) {
+    return function onMessage(e) {
+        // gotta make sure content negotiation is in place from extensions / protocol
+        const message = JSON.parse(e.data)
+        return (routes[message.type] ?? defaultHandler)(e, socket)
+    }
+}
+
 class WebsocketManager {
     constructor(heartbeatIntervalSeconds=60) {
         this.sockets = new Map()
@@ -76,15 +94,10 @@ class WebsocketManager {
 
         socket.onopen = () => console.log("socket opened");
 
-        const pong = this.sendPong.bind(this)
-        socket.onmessage = (e) => {
-            console.log("socket message:", e.data, e.origin, e.source);
-            if (JSON.parse(e.data).type === "ping") {
-                pong(id, true)
-                return
-            }
-            socket.send(new Date().toString());
-        };
+        const pong = this.sendPong.bind(this, null, id, true)
+        socket.onmessage = messageRouter(socket, {
+            "ping": pong,
+        }, nackMessage)
 
         const unregister = this.unregister.bind(this)
         socket.onerror = (e) => {
@@ -153,14 +166,15 @@ type RouterConfig = {
     [key: string]: (request: Request) => Response;
   };
 
-function router(routes: RouterConfig) {
+  
+function httpRouter(routes: RouterConfig, defaultHandler) {
     return async function handler(request: Request): Promise<Response> {
         const requestPattern = `${request.method} ${new URL(request.url).pathname}`
-        return await (routes[requestPattern] ?? notFound)(request)
+        return await (routes[requestPattern] ?? defaultHandler)(request)
     }
 }
 
-export const handler = router({
+export const handler = httpRouter({
     "GET /healthz": getHealth,
     "GET /readiness": getReadiness,
     "GET /connections": getConnections,
@@ -169,7 +183,7 @@ export const handler = router({
     // websocket upgrade requests start as GETs
     "GET /websocket": establishWebsocket,
     "GET /sse": sse,
-})
+}, notFound)
 
 const httpServer = Deno.serve({
     hostname: "0.0.0.0",
