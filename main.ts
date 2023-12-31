@@ -88,13 +88,15 @@ function unsubscribe(e, socket) {
 
 function relay(e) {
     const message = JSON.parse(e.data)
-    const topic = message.attributes.topic
+    const topic = message?.attributes?.topic
+
+    console.log("broadcasting to topic:", topic)
     
-    websocketBroker.getSubscribers(topic).forEach((socket) => socket.send(message))
+    websocketBroker.getSubscribers(topic).forEach((socket) => socket.send(e.data))
 }
 
 function echo(e, socket) {
-    socket.send(e.message)
+    socket.send(e.data)
 }
 
 function closeOnReceivingEnd(e, socket) {
