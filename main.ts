@@ -52,6 +52,7 @@ class Broker<T> {
 
     unsubscribe(topic: String, socket: T): void {
         // probably a better way to optimize removal
+        // TODO: fix this
         this.subscribed.set(topic, this.getSubscribers(topic).filter(s => s == socket))
     }
 
