@@ -34,6 +34,43 @@ async function closeConnection(req: Request): Response {
     })
 }
 
+function subscribe(e, socket) {
+    // TODO: subscribe to topic
+
+    socket.send(JSON.stringify({
+        type: "ack",
+        attributes: {
+            ts: new Date()
+        }
+    }))
+}
+
+function unsubscribe(e, socket) {
+    // TODO: unsubscribe to topic
+
+    socket.send(JSON.stringify({
+        type: "ack",
+        attributes: {
+            ts: new Date()
+        }
+    }))
+}
+
+function relay(e) {
+    const message = JSON.parse(e.data)
+    const topic = message.attributes.topic
+    
+    // TODO: use key to lookup subscribers and event out
+}
+
+function echo(e, socket) {
+    socket.send(e.message)
+}
+
+function closeOnReceivingEnd(e, socket) {
+    socket.close()
+}
+
 function nackMessage(e, socket) {
     socket.send(JSON.stringify({
         type: "nack",
@@ -53,6 +90,9 @@ function messageRouter(socket, routes, defaultHandler) {
 }
 
 class WebsocketManager {
+    sockets: Map<number, WebSocket>
+    latestID: number
+    heartBeatInterval: number
     constructor(heartbeatIntervalSeconds=60) {
         this.sockets = new Map()
         this.latestID = 1
@@ -97,7 +137,12 @@ class WebsocketManager {
         const pong = this.sendPong.bind(this, null, id, true)
         socket.onmessage = messageRouter(socket, {
             "ping": pong,
-        }, nackMessage)
+            "subscribe": subscribe,
+            "unsubscribe": unsubscribe,
+            "nack": nackMessage,
+            "echo": echo,
+            "bye": closeOnReceivingEnd,
+        }, relay)
 
         const unregister = this.unregister.bind(this)
         socket.onerror = (e) => {
