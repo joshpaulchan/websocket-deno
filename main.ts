@@ -34,8 +34,37 @@ async function closeConnection(req: Request): Response {
     })
 }
 
+// needs to be workable to actual broker tech (redis)
+// also needs to be able to subscribe other event streams (SSE) not just sockets
+class Broker<T> {
+    subscribed: Map<String, Array<T>>
+    constructor() {
+        this.subscribed = new Map<String, Array<T>>()
+    }
+
+    subscribe(topic: String, socket: T): void {
+        if (this.subscribed.has(topic)) {
+            this.subscribed.get(topic)?.push(socket)
+        } else {
+            this.subscribed.set(topic, [socket])
+        }
+    }
+
+    unsubscribe(topic: String, socket: T): void {
+        // probably a better way to optimize removal
+        this.subscribed.set(topic, this.getSubscribers(topic).filter(s => s == socket))
+    }
+
+    getSubscribers(topic: String): Array<T> {
+        return this.subscribed.get(topic) ?? []
+    }
+}
+
+let websocketBroker = new Broker<WebSocket>()
+
 function subscribe(e, socket) {
-    // TODO: subscribe to topic
+    const message = JSON.parse(e.data)
+    websocketBroker.subscribe(message.attributes.topic, socket)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -46,7 +75,8 @@ function subscribe(e, socket) {
 }
 
 function unsubscribe(e, socket) {
-    // TODO: unsubscribe to topic
+    const message = JSON.parse(e.data)
+    websocketBroker.unsubscribe(message.attributes.topic, socket)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -60,7 +90,7 @@ function relay(e) {
     const message = JSON.parse(e.data)
     const topic = message.attributes.topic
     
-    // TODO: use key to lookup subscribers and event out
+    websocketBroker.getSubscribers(topic).forEach((socket) => socket.send(message))
 }
 
 function echo(e, socket) {
