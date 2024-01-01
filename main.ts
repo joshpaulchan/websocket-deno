@@ -61,6 +61,7 @@ class Broker<T> {
     }
 }
 
+// TODO: connect to a bunch of remote event sources and on event, lookup relevant subscribers and emit to em
 let websocketBroker = new Broker<WebSocket>()
 
 function pong(e, socket) {
@@ -156,7 +157,7 @@ class WebsocketManager {
 
         this.sockets.set(id, socket)
 
-        socket.onopen = () => console.log("socket opened");
+        socket.onopen = () => console.log(new Date(), "socket opened");
 
         socket.onmessage = messageRouter(socket, {
             "ping": pong,
@@ -169,7 +170,7 @@ class WebsocketManager {
 
         const unregister = this.unregister.bind(this)
         socket.onerror = (e) => {
-            console.log("socket errored:", e)
+            console.log(new Date(), "socket errored:", e)
             unregister(id)
         };
         socket.onclose = () => unregister(id);
@@ -177,11 +178,8 @@ class WebsocketManager {
 
     unregister(id) {
         increment(METRICS, "ws_server.websockets.active", -1)
-        const socket = this.sockets.get(id)
-        // state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
-        if (socket != null) {
-            socket.close()
-        }
+        // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
+        this.sockets.get(id)?.close()
         this.sockets.delete(id)
     }
 }
