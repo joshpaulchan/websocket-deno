@@ -7,7 +7,7 @@ function getReadiness(_request: Request): Response {
     return new Response(null)
 }
 
-let METRICS: Map = new Map([])
+let METRICS = new Map<String, number>([])
 function increment(map, key, amount = 1, _default = 0) {
     map.set(key, (map.get(key) ?? _default) + amount)
 }
@@ -24,7 +24,7 @@ function getConnections(_request: Request): Response {
     })
 }
 
-async function closeConnection(req: Request): Response {
+async function closeConnection(req: Request): Promise<Response> {
     websocketManager.unregister(await req.json().id)
     return new Response(null, {
         status: 204,
@@ -150,7 +150,11 @@ class WebsocketManager {
         this.sockets.forEach((socket, key) => this.unregister(key))
     }
 
-    register(socket) {
+    getById(id: number): WebSocket | undefined {
+        return this.sockets.get(id)
+    }
+
+    register(socket: WebSocket) {
         increment(METRICS, "server.websockets.active", 1)
         const id = this.latestID + 1
         this.latestID += id
@@ -176,7 +180,7 @@ class WebsocketManager {
         socket.onclose = () => unregister(id);
     }
 
-    unregister(id) {
+    unregister(id: number): void {
         increment(METRICS, "server.websockets.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.sockets.get(id)?.close()
@@ -229,7 +233,7 @@ function notFound(_request: Request): Response {
 }
 
 type RouterConfig = {
-    [key: string]: (request: Request) => Response;
+    [key: string]: ((request: Request) => Response) | ((request: Request) => Promise<Response>);
   };
 
   
