@@ -151,7 +151,7 @@ class WebsocketManager {
     }
 
     register(socket) {
-        increment(METRICS, "ws_server.websockets.active", 1)
+        increment(METRICS, "server.websockets.active", 1)
         const id = this.latestID + 1
         this.latestID += id
 
@@ -177,7 +177,7 @@ class WebsocketManager {
     }
 
     unregister(id) {
-        increment(METRICS, "ws_server.websockets.active", -1)
+        increment(METRICS, "server.websockets.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.sockets.get(id)?.close()
         this.sockets.delete(id)
@@ -191,7 +191,7 @@ function establishWebsocket(_request: Request): Response {
         return new Response("request isn't trying to upgrade to websocket.");
     }
 
-    increment(METRICS, "ws_server.tcp_conn.upgrades", 1)
+    increment(METRICS, "server.tcp_conn.upgrades", 1)
     const { socket, response } = Deno.upgradeWebSocket(_request);
     websocketManager.register(socket)
 
@@ -203,13 +203,13 @@ function sse(_request: Request): Response {
     const msg = new TextEncoder().encode(_request.url);
     const body = new ReadableStream({
         start(controller) {
-            increment(METRICS, "server.sse.active", 1)
+            increment(METRICS, "server.server_sent_events.active", 1)
             timerId = setInterval(() => {
                 controller.enqueue(msg);
             }, 1000);
         },
         cancel() {
-            increment(METRICS, "server.sse.active", -1)
+            increment(METRICS, "server.server_sent_events.active", -1)
             if (typeof timerId === "number") {
                 clearInterval(timerId);
             }
@@ -270,14 +270,14 @@ const webSocketServer = Deno.listen({
 async function handle(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
     for await (const requestEvent of httpConn) {
-        increment(METRICS, "ws_server.request_event", 1)
+        increment(METRICS, "server.request_event", 1)
         await requestEvent.respondWith(handler(requestEvent.request));
-        increment(METRICS, "ws_server.request_event", -1)
+        increment(METRICS, "server.request_event", -1)
     }
 }
 
 for await (const conn of webSocketServer) {
-    increment(METRICS, "ws_server.tcp_conn.active", 1)
+    increment(METRICS, "server.tcp_conn.active", 1)
     handle(conn);
-    increment(METRICS, "ws_server.tcp_conn.active", -1)
+    increment(METRICS, "server.tcp_conn.active", -1)
 }
