@@ -63,6 +63,15 @@ class Broker<T> {
 
 let websocketBroker = new Broker<WebSocket>()
 
+function pong(e, socket) {
+    socket.send(JSON.stringify({
+        type: "pong",
+        attributes: {
+            ts: new Date()
+        }
+    }))
+}
+
 function subscribe(e, socket) {
     const message = JSON.parse(e.data)
     websocketBroker.subscribe(message.attributes.topic, socket)
@@ -133,25 +142,7 @@ class WebsocketManager {
     }
 
     sendHeartBeats() {
-        const sendHeartBeat = this.sendPong.bind(this)
-        this.sockets.forEach((socket, key) => sendHeartBeat(key, false))
-    }
-
-    // I shouldn't actually need to sending pongs, those frames should be implemented
-    // as part of the websocket protocol
-    sendPong(id, prompted) {
-        const socket = this.sockets.get(id)
-        if (!socket) {
-            return
-        }
-
-        socket.send(JSON.stringify({
-            id: null,
-            type: "PONG",
-            attributes: {
-                prompted
-            }
-        }))
+        this.sockets.forEach((socket, key) => pong({}, socket))
     }
 
     drain() {
@@ -167,7 +158,6 @@ class WebsocketManager {
 
         socket.onopen = () => console.log("socket opened");
 
-        const pong = this.sendPong.bind(this, null, id, true)
         socket.onmessage = messageRouter(socket, {
             "ping": pong,
             "subscribe": subscribe,
