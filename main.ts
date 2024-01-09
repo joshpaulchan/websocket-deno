@@ -9,7 +9,7 @@ function getReadiness(_request: Request): Response {
 }
 
 let METRICS = new Map<String, number>([])
-function increment(map, key, amount = 1, _default = 0) {
+function increment(map: Map<any, number>, key: any, amount = 1, _default = 0) {
     map.set(key, (map.get(key) ?? _default) + amount)
 }
 
@@ -38,16 +38,16 @@ async function closeConnection(req: Request): Promise<Response> {
 // needs to be workable to actual broker tech (redis)
 // also needs to be able to subscribe other event streams (SSE) not just sockets
 class Broker<T> {
-    subscribed: Map<String, Array<T>>
+    #subscribed: Map<String, Array<T>>
     constructor() {
-        this.subscribed = new Map<String, Array<T>>()
+        this.#subscribed = new Map<String, Array<T>>()
     }
 
     subscribe(topic: String, socket: T): void {
-        if (this.subscribed.has(topic)) {
-            this.subscribed.get(topic)?.push(socket)
+        if (this.#subscribed.has(topic)) {
+            this.#subscribed.get(topic)?.push(socket)
         } else {
-            this.subscribed.set(topic, [socket])
+            this.#subscribed.set(topic, [socket])
         }
         console.log(new Date(), `added subscriber for ${topic}`)
     }
@@ -55,12 +55,12 @@ class Broker<T> {
     unsubscribe(topic: String, socket: T): void {
         // probably a better way to optimize removal
         // TODO: fix this
-        this.subscribed.set(topic, this.getSubscribers(topic).filter(s => s == socket))
+        this.#subscribed.set(topic, this.getSubscribers(topic).filter(s => s == socket))
         console.log(new Date(), `removed subscriber for ${topic}`)
     }
 
     getSubscribers(topic: String): Array<T> {
-        return this.subscribed.get(topic) ?? []
+        return this.#subscribed.get(topic) ?? []
     }
 }
 
@@ -129,7 +129,7 @@ function nackMessage(e, socket) {
 }
 
 // maybe I should be passing socket ID around instead and interfacing thru manager? 🤷
-function messageRouter(socket, socketID, routes, defaultHandler) {
+function messageRouter(socket: WebSocket, socketID: number, routes: Object, defaultHandler) {
     return function onMessage(e) {
         // gotta make sure content negotiation is in place from extensions / protocol
         const message = JSON.parse(e.data)
@@ -137,7 +137,7 @@ function messageRouter(socket, socketID, routes, defaultHandler) {
     }
 }
 
-// TODO: generalize to any potential listening stream (SSE or websockets)
+// TODO: generalize to any potential listening stream (SSE or Websocket)
 class WebsocketManager {
     sockets: Map<number, WebSocket>
     latestID: number
@@ -161,7 +161,7 @@ class WebsocketManager {
     }
 
     register(socket: WebSocket): number {
-        increment(METRICS, "server.websockets.active", 1)
+        increment(METRICS, "server.websocket.active", 1)
         const id = this.latestID + 1
         this.latestID += id
 
@@ -190,7 +190,7 @@ class WebsocketManager {
 
     unregister(id: number): void {
         console.log(new Date(), "socket closed")
-        increment(METRICS, "server.websockets.active", -1)
+        increment(METRICS, "server.websocket.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.sockets.get(id)?.close()
         this.sockets.delete(id)
@@ -260,7 +260,7 @@ function notFound(_request: Request): Response {
 }
 
 type RouterConfig = {
-    [key: string]: ((request: Request) => Response) | ((request: Request) => Promise<Response>);
+    [key: string]: (request: Request) => Response | Promise<Response>;
 };
 
   
@@ -280,7 +280,7 @@ export const handler = websocketMiddleware(httpRouter({
     "GET /sse": sse,
 }, notFound))
 
-const port = new Number(Deno.env.get("PORT") ?? 8080)
+const port = parseInt(Deno.env.get("PORT") ?? 8080)
 const httpServer = Deno.serve({
     hostname: "0.0.0.0",
     port,
