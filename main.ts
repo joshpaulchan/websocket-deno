@@ -134,9 +134,9 @@ function messageRouter(socket: WebSocket, socketID: number, routes: Object, defa
     }
 }
 
-// TODO: generalize to any potential listening stream (SSE or Websocket)
-class WebsocketManager implements Manager<number, WebSocket> {
-    #managedItems: Map<number, WebSocket>
+
+abstract class BaseManager<T> {
+    #managedItems: Map<number, T>
     #latestID: number
     #metricName: string
     constructor(metricName: string) {
@@ -145,19 +145,47 @@ class WebsocketManager implements Manager<number, WebSocket> {
         this.#metricName = metricName
     }
 
-    getById(id: number): WebSocket | undefined {
+    getById(id: number): T | undefined {
         return this.#managedItems.get(id)
     }
 
-    register(socket: WebSocket): number {
+    register(item: T): number {
         increment(METRICS, `server.${this.#metricName}.active`, 1)
         const id = this.#latestID + 1
         this.#latestID += id
 
-        this.#managedItems.set(id, socket)
-        this.bootstrap(id, socket)
+        this.#managedItems.set(id, item)
+        this.bootstrap(id, item)
 
         return id;
+    }
+
+    bootstrap(id: number, item: T): void {}
+
+    unregister(id: number, e: Error | undefined): void {
+        if (e != null) {
+            console.log(new Date(), `${this.#metricName} errored:`, e)
+        } else {
+            console.log(new Date(), `${this.#metricName} closed`)
+        }
+        
+        increment(METRICS, `server.${this.#metricName}.active`, -1)
+        const item = this.#managedItems.get(id)
+        if (item) {
+            this.teardown(id, item)
+        }
+        this.#managedItems.delete(id)
+    }
+
+    teardown(id: number, item: T): void {}
+}
+
+// TODO: generalize to any potential listening stream (SSE or Websocket)
+class WebsocketManager extends BaseManager<WebSocket> implements Manager<number, WebSocket> {
+    #metricName: string
+    constructor(metricName: string) {
+        super(metricName)
+        this.#metricName = metricName
     }
 
     bootstrap(id: number, item: WebSocket): void {
@@ -177,21 +205,6 @@ class WebsocketManager implements Manager<number, WebSocket> {
         item.onclose = () => unregister(id)
     }
 
-    unregister(id: number, e: Error | undefined): void {
-        if (e != null) {
-            console.log(new Date(), `${this.#metricName} errored:`, e)
-        } else {
-            console.log(new Date(), `${this.#metricName} closed`)
-        }
-        
-        increment(METRICS, `server.${this.#metricName}.active`, -1)
-        const item = this.#managedItems.get(id)
-        if (item) {
-            this.teardown(id, item)
-        }
-        this.#managedItems.delete(id)
-    }
-
     teardown(id: number, socket: WebSocket): void {
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         socket.close()
@@ -200,50 +213,13 @@ class WebsocketManager implements Manager<number, WebSocket> {
 }
 
 // TODO: generalize to any potential listening stream (SSE or Websocket)
-class ServerSentEventsManager implements Manager<number, ReadableStreamDefaultController> {
-    #managedItems: Map<number, ReadableStreamDefaultController>
-    #latestID: number
-    #metricName: string
+class ServerSentEventsManager extends BaseManager<ReadableStreamDefaultController> implements Manager<number, ReadableStreamDefaultController> {
     constructor(metricName: string) {
-        this.#managedItems = new Map()
-        this.#latestID = 1
-        this.#metricName = metricName
+        super(metricName)
     }
-
-    getById(id: number): ReadableStreamDefaultController | undefined {
-        return this.#managedItems.get(id)
-    }
-
-    register(item: ReadableStreamDefaultController): number {
-        increment(METRICS, `server.${this.#metricName}.active`, 1)
-        const id = this.#latestID + 1
-        this.#latestID += id
-
-        this.#managedItems.set(id, item)
-        this.bootstrap(id, item)
-
-        return id;
-    }
-
-    bootstrap(id: number, item: ReadableStreamDefaultController): void {}
-
-    unregister(id: number, e: Error | undefined): void {
-        if (e != null) {
-            console.log(new Date(), `${this.#metricName} errored:`, e)
-        } else {
-            console.log(new Date(), `${this.#metricName} closed`)
-        }
-        
-        increment(METRICS, `server.${this.#metricName}.active`, -1)
-        const item = this.#managedItems.get(id)
-        if (item) {
-            this.teardown(id, item)
-        }
-        this.#managedItems.delete(id)
-    }
-
-    teardown(id: number, item: ReadableStreamDefaultController): void {
+    teardown(id: number, item: ReadableByteStreamController): void {
         item.close()
+        // TODO: unsubscribe socket from all subs
     }
 }
 
