@@ -182,10 +182,11 @@ class WebsocketManager {
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.#sockets.get(id)?.close()
         this.#sockets.delete(id)
+        // TODO: unsubscribe socket from all subs
     }
 }
 
-const subscribeSocketToPath = new Boolean(Deno.env.get("CLIENT_AUTO_SUBSCRIBE_ON_PATH")) ?? true
+const subscribeSocketToPath = new Boolean(Deno.env.get("CLIENT_AUTO_SUBSCRIBE_ON_PATH") ?? true)
 
 // handles upgrades to websocket protocol
 function websocketMiddleware(next) {
