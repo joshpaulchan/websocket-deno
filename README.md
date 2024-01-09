@@ -9,6 +9,18 @@ This service can be used to implement and experiment with several real-time tech
 
 hmm, having written that a tricky thing is compression / estimation - in a related data model, how should a client express what entities and changes (if diffs) they want to receive, how should that be performantly encoded for retrieval and manipulation, and how that should be expressed in the MQ tech?
 
+- entities (users, messages) - often have relationships with each other 
+- actions (create remove update delete)
+- commands/queries
+
+type = "message:add" for example.
+
+but you'd probably want qualifiers like (messages:*?room=12&room=11) to request delivery of an event for every action, on every message, in the given rooms.
+
+or /messages/1:update for an update to every
+and probably want some way to express multiple of these subscriptions and a useful way to optimize memory, etc. i feel JSONAPI may still help with this, at least for guidelines about specifying filters and inclusion,
+
+
 ## Quickstart
 
 ```
