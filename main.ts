@@ -137,9 +137,11 @@ function messageRouter(socket: WebSocket, socketID: number, routes: Object, defa
 class WebsocketManager {
     #sockets: Map<number, WebSocket>
     #latestID: number
-    constructor() {
+    #metricName: string
+    constructor(metricName: string) {
         this.#sockets = new Map()
         this.#latestID = 1
+        this.#metricName = metricName
     }
 
     getById(id: number): WebSocket | undefined {
@@ -147,13 +149,13 @@ class WebsocketManager {
     }
 
     register(socket: WebSocket): number {
-        increment(METRICS, "server.websocket.active", 1)
+        increment(METRICS, `server.${this.#metricName}.active`, 1)
         const id = this.#latestID + 1
         this.#latestID += id
 
         this.#sockets.set(id, socket)
 
-        socket.onopen = () => console.log(new Date(), "socket opened");
+        socket.onopen = () => console.log(new Date(), `${this.#metricName} opened`)
 
         socket.onmessage = messageRouter(socket, id, {
             "ping": pong,
@@ -173,15 +175,16 @@ class WebsocketManager {
 
     unregister(id: number, e: Error | undefined): void {
         if (e != null) {
-            console.log(new Date(), "socket errored:", e)
+            console.log(new Date(), `${this.#metricName} errored:`, e)
         } else {
-            console.log(new Date(), "socket closed")
+            console.log(new Date(), `${this.#metricName} closed`)
         }
         
-        increment(METRICS, "server.websocket.active", -1)
+        increment(METRICS, `server.${this.#metricName}.active`, -1)
+        this.#sockets.delete(id)
+
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.#sockets.get(id)?.close()
-        this.#sockets.delete(id)
         // TODO: unsubscribe socket from all subs
     }
 }
@@ -267,7 +270,7 @@ export const handler = websocketMiddleware(httpRouter({
     "GET /sse": sse,
 }, notFound))
 
-let websocketManager = new WebsocketManager()
+let websocketManager = new WebsocketManager("websocket")
 
 const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
 const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
