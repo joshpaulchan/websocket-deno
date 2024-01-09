@@ -275,15 +275,20 @@ const webSocketServer = Deno.listen({
     handle
 })
 
-const redis = await connect({ hostname: "127.0.0.1" });
-let publisher = await connect({ hostname: "127.0.0.1" });
+const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
+const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
+const channelPattern = Deno.env.get("REDIS_CHANNEL_PATTEN") ?? "*"
+const redis = await connect({ hostname: redisHostname, port: redisPort });
+let publisher = await connect({ hostname: redisHostname, port: redisPort });
 // manage subscriptions better?
-let sub = await redis.psubscribe("*");
+let sub = await redis.psubscribe(channelPattern);
 (async function () {
   for await (const { channel, message } of sub.receive()) {
     websocketBroker.getSubscribers(channel).forEach(id => websocketManager.getById(id)?.send(message))
   }
 })();
+
+console.log(new Date(), `subscribing to channels matching ${channelPattern} in ${redisHostname}:${port}`)
 
 async function handle(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);

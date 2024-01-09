@@ -2,8 +2,7 @@
 ## Quickstart
 
 ```
-docker compose up -d
-deno run --allow-net --allow-env main.ts
+docker compose up --build
 ```
 
 ## Development

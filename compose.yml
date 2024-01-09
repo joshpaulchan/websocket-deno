@@ -4,4 +4,14 @@ services:
   redis:
     image: redis:latest
     ports:
-      - 6379:6379
+      - "6379:6379"
+  app:
+    restart: "on-failure"
+    environment:
+      - REDIS_HOSTNAME=redis
+    ports:
+      - "8080-8090:8080" # port range must be > than the replicas set, bc they'll all be unique
+    build:
+      context: .
+    deploy:
+      replicas: 3  
