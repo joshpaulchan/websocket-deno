@@ -62,7 +62,7 @@ class Broker<T> {
 }
 
 // TODO: connect to a bunch of remote event sources and on event, lookup relevant subscribers and emit to em
-let websocketBroker = new Broker<WebSocket>()
+let websocketBroker = new Broker<number>()
 
 function pong(e, socket) {
     socket.send(JSON.stringify({
@@ -73,9 +73,9 @@ function pong(e, socket) {
     }))
 }
 
-function subscribe(e, socket) {
+function subscribe(e, socket, socketID) {
     const message = JSON.parse(e.data)
-    websocketBroker.subscribe(message.attributes.topic, socket)
+    websocketBroker.subscribe(message.attributes.topic, socketID)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -85,9 +85,9 @@ function subscribe(e, socket) {
     }))
 }
 
-function unsubscribe(e, socket) {
+function unsubscribe(e, socket, socketID) {
     const message = JSON.parse(e.data)
-    websocketBroker.unsubscribe(message.attributes.topic, socket)
+    websocketBroker.unsubscribe(message.attributes.topic, socketID)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -103,7 +103,7 @@ function relay(e) {
 
     console.log("broadcasting to topic:", topic)
     
-    websocketBroker.getSubscribers(topic).forEach((socket) => socket.send(e.data))
+    websocketBroker.getSubscribers(topic).forEach(id => websocketManager.getById(id)?.send(e.data))
 }
 
 function echo(e, socket) {
@@ -124,11 +124,11 @@ function nackMessage(e, socket) {
 }
 
 // maybe I should be passing socket ID around instead and interfacing thru manager? 🤷
-function messageRouter(socket, routes, defaultHandler) {
+function messageRouter(socket, socketID, routes, defaultHandler) {
     return function onMessage(e) {
         // gotta make sure content negotiation is in place from extensions / protocol
         const message = JSON.parse(e.data)
-        return (routes[message.type] ?? defaultHandler)(e, socket)
+        return (routes[message.type] ?? defaultHandler)(e, socket, socketID)
     }
 }
 
@@ -163,7 +163,7 @@ class WebsocketManager {
 
         socket.onopen = () => console.log(new Date(), "socket opened");
 
-        socket.onmessage = messageRouter(socket, {
+        socket.onmessage = messageRouter(socket, id, {
             "ping": pong,
             "subscribe": subscribe,
             "unsubscribe": unsubscribe,
