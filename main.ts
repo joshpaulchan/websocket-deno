@@ -258,7 +258,7 @@ export const handler = httpRouter({
     "GET /sse": sse,
 }, notFound)
 
-const port = Number(Deno.env.get("PORT", 8000))
+const port = new Number(Deno.env.get("PORT") ?? 8080)
 const httpServer = Deno.serve({
     hostname: "0.0.0.0",
     port,
