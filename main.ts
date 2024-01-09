@@ -154,10 +154,15 @@ class WebsocketManager {
         this.#latestID += id
 
         this.#sockets.set(id, socket)
+        this.bootstrap(id, socket)
 
-        socket.onopen = () => console.log(new Date(), `${this.#metricName} opened`)
+        return id;
+    }
 
-        socket.onmessage = messageRouter(socket, id, {
+    bootstrap(id: number, item: WebSocket): void {
+        item.onopen = () => console.log(new Date(), `${this.#metricName} opened`)
+
+        item.onmessage = messageRouter(item, id, {
             "ping": pong,
             "subscribe": subscribe,
             "unsubscribe": unsubscribe,
@@ -166,11 +171,9 @@ class WebsocketManager {
             "bye": closeOnReceivingEnd,
         }, relay)
 
-        // TODO: unsubscribe all
         const unregister = this.unregister.bind(this)
-        socket.onerror = (e) => unregister(id, e)
-        socket.onclose = () => unregister(id)
-        return id;
+        item.onerror = (e) => unregister(id, e)
+        item.onclose = () => unregister(id)
     }
 
     unregister(id: number, e: Error | undefined): void {
@@ -181,10 +184,16 @@ class WebsocketManager {
         }
         
         increment(METRICS, `server.${this.#metricName}.active`, -1)
+        const item = this.#sockets.get(id)
+        if (item) {
+            this.teardown(id, item)
+        }
         this.#sockets.delete(id)
+    }
 
+    teardown(id: number, socket: WebSocket): void {
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
-        this.#sockets.get(id)?.close()
+        socket.close()
         // TODO: unsubscribe socket from all subs
     }
 }
