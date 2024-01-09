@@ -184,6 +184,7 @@ class WebsocketManager {
     }
 
     unregister(id: number): void {
+        console.log(new Date(), "socket closed")
         increment(METRICS, "server.websockets.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.sockets.get(id)?.close()
