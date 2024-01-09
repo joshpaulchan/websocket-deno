@@ -56,6 +56,7 @@ class Broker<T> {
 
 // TODO: connect to a bunch of remote event sources and on event, lookup relevant subscribers and emit to em
 let websocketBroker = new Broker<number>()
+let sseBroker = new Broker<number>()
 
 function pong(e: MessageEvent, socket: WebSocket) {
     socket.send(JSON.stringify({
@@ -134,18 +135,18 @@ function messageRouter(socket: WebSocket, socketID: number, routes: Object, defa
 }
 
 // TODO: generalize to any potential listening stream (SSE or Websocket)
-class WebsocketManager {
-    #sockets: Map<number, WebSocket>
+class WebsocketManager implements Manager<number, WebSocket> {
+    #managedItems: Map<number, WebSocket>
     #latestID: number
     #metricName: string
     constructor(metricName: string) {
-        this.#sockets = new Map()
+        this.#managedItems = new Map()
         this.#latestID = 1
         this.#metricName = metricName
     }
 
     getById(id: number): WebSocket | undefined {
-        return this.#sockets.get(id)
+        return this.#managedItems.get(id)
     }
 
     register(socket: WebSocket): number {
@@ -153,7 +154,7 @@ class WebsocketManager {
         const id = this.#latestID + 1
         this.#latestID += id
 
-        this.#sockets.set(id, socket)
+        this.#managedItems.set(id, socket)
         this.bootstrap(id, socket)
 
         return id;
@@ -184,11 +185,11 @@ class WebsocketManager {
         }
         
         increment(METRICS, `server.${this.#metricName}.active`, -1)
-        const item = this.#sockets.get(id)
+        const item = this.#managedItems.get(id)
         if (item) {
             this.teardown(id, item)
         }
-        this.#sockets.delete(id)
+        this.#managedItems.delete(id)
     }
 
     teardown(id: number, socket: WebSocket): void {
@@ -196,6 +197,66 @@ class WebsocketManager {
         socket.close()
         // TODO: unsubscribe socket from all subs
     }
+}
+
+// TODO: generalize to any potential listening stream (SSE or Websocket)
+class ServerSentEventsManager implements Manager<number, ReadableStreamDefaultController> {
+    #managedItems: Map<number, ReadableStreamDefaultController>
+    #latestID: number
+    #metricName: string
+    constructor(metricName: string) {
+        this.#managedItems = new Map()
+        this.#latestID = 1
+        this.#metricName = metricName
+    }
+
+    getById(id: number): ReadableStreamDefaultController | undefined {
+        return this.#managedItems.get(id)
+    }
+
+    register(item: ReadableStreamDefaultController): number {
+        increment(METRICS, `server.${this.#metricName}.active`, 1)
+        const id = this.#latestID + 1
+        this.#latestID += id
+
+        this.#managedItems.set(id, item)
+        this.bootstrap(id, item)
+
+        return id;
+    }
+
+    bootstrap(id: number, item: ReadableStreamDefaultController): void {}
+
+    unregister(id: number, e: Error | undefined): void {
+        if (e != null) {
+            console.log(new Date(), `${this.#metricName} errored:`, e)
+        } else {
+            console.log(new Date(), `${this.#metricName} closed`)
+        }
+        
+        increment(METRICS, `server.${this.#metricName}.active`, -1)
+        const item = this.#managedItems.get(id)
+        if (item) {
+            this.teardown(id, item)
+        }
+        this.#managedItems.delete(id)
+    }
+
+    teardown(id: number, item: ReadableStreamDefaultController): void {
+        item.close()
+    }
+}
+
+interface Manager<K, T> {
+    getById(id: K): T | undefined
+
+    register(item: T): number
+
+    bootstrap(id: K, item: T): void
+
+    unregister(id: K, e: Error | undefined): void
+
+    teardown(id: K, item: T): void
 }
 
 const subscribeSocketToPath = new Boolean(Deno.env.get("CLIENT_AUTO_SUBSCRIBE_ON_PATH") ?? true)
@@ -231,22 +292,22 @@ function establishWebsocket(_request: Request): Response | null {
 }
 
 function sse(_request: Request): Response {
-    let timerId: number | undefined;
-    const msg = new TextEncoder().encode(_request.url);
+    let id: number | undefined;
     const body = new ReadableStream({
         start(controller) {
             increment(METRICS, "server.server_sent_events.active", 1)
-            timerId = setInterval(() => {
-                controller.enqueue(msg);
-            }, 1000);
+            id = sseManager.register(controller)
+            sseBroker.subscribe(new URL(_request.url).pathname, id)
         },
         cancel() {
             increment(METRICS, "server.server_sent_events.active", -1)
-            if (typeof timerId === "number") {
-                clearInterval(timerId);
+            if (id) {
+                sseBroker.unsubscribe(new URL(_request.url).pathname, id)
+                sseManager.unregister(id, undefined)
             }
         },
     });
+
     return new Response(body, {
         headers: {
             "Content-Type": "text/event-stream",
@@ -279,7 +340,8 @@ export const handler = websocketMiddleware(httpRouter({
     "GET /sse": sse,
 }, notFound))
 
-let websocketManager = new WebsocketManager("websocket")
+let websocketManager : Manager<number, WebSocket> = new WebsocketManager("websocket")
+let sseManager : Manager<number, ReadableStreamDefaultController> = new ServerSentEventsManager("server_sent_event_connections")
 
 const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
 const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
@@ -290,12 +352,13 @@ let publisher = await connect({ hostname: redisHostname, port: redisPort });
 let sub = await redis.psubscribe(channelPattern);
 
 // make em & run
-
 (
     async function () {
+        const encoder = new TextEncoder()
         console.log(new Date(), `subscribing to channels matching ${channelPattern} in ${redisHostname}:${redisPort}`)
         for await (const { channel, message } of sub.receive()) {
             websocketBroker.getSubscribers(channel).forEach(id => websocketManager.getById(id)?.send(message))
+            sseBroker.getSubscribers(channel).forEach(id => sseManager.getById(id)?.enqueue(encoder.encode(message)))
         }
     }
 )();
