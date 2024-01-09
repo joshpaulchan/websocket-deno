@@ -280,22 +280,7 @@ export const handler = websocketMiddleware(httpRouter({
     "GET /sse": sse,
 }, notFound))
 
-const port = parseInt(Deno.env.get("PORT") ?? 8080)
-const httpServer = Deno.serve({
-    hostname: "0.0.0.0",
-    port,
-    handler
-})
-
 let websocketManager = new WebsocketManager()
-// NOTE: this dedicated server may not be necessary, but may be useful for:
-// - splitting event loops(if you can have more than 1 in deno an)
-// - instrumenting some of the lower level bits
-const webSocketServer = Deno.listen({
-    hostname: "0.0.0.0",
-    port: port + 1,
-    handle
-})
 
 const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
 const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
@@ -304,25 +289,25 @@ const redis = await connect({ hostname: redisHostname, port: redisPort });
 let publisher = await connect({ hostname: redisHostname, port: redisPort });
 // manage subscriptions better?
 let sub = await redis.psubscribe(channelPattern);
-(async function () {
-  for await (const { channel, message } of sub.receive()) {
-    websocketBroker.getSubscribers(channel).forEach(id => websocketManager.getById(id)?.send(message))
-  }
-})();
 
-console.log(new Date(), `subscribing to channels matching ${channelPattern} in ${redisHostname}:${port}`)
+// make em & run
 
-async function handle(conn: Deno.Conn) {
-    const httpConn = Deno.serveHttp(conn);
-    for await (const requestEvent of httpConn) {
-        increment(METRICS, "server.request_event", 1)
-        await requestEvent.respondWith(handler(requestEvent.request));
-        increment(METRICS, "server.request_event", -1)
+(
+    async function () {
+        console.log(new Date(), `subscribing to channels matching ${channelPattern} in ${redisHostname}:${redisPort}`)
+        for await (const { channel, message } of sub.receive()) {
+            websocketBroker.getSubscribers(channel).forEach(id => websocketManager.getById(id)?.send(message))
+        }
     }
-}
+)();
 
-for await (const conn of webSocketServer) {
-    increment(METRICS, "server.tcp_conn.active", 1)
-    handle(conn);
-    increment(METRICS, "server.tcp_conn.active", -1)
-}
+(
+    async function () {
+        const port = parseInt(Deno.env.get("PORT") ?? 8080)
+        const httpServer = Deno.serve({
+            hostname: "0.0.0.0",
+            port,
+            handler
+        })
+    }
+)();
