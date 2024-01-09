@@ -129,29 +129,23 @@ function messageRouter(socket: WebSocket, socketID: number, routes: Object, defa
 
 // TODO: generalize to any potential listening stream (SSE or Websocket)
 class WebsocketManager {
-    sockets: Map<number, WebSocket>
-    latestID: number
-    heartBeatInterval: number
-    constructor(heartbeatIntervalSeconds=60) {
-        this.sockets = new Map()
-        this.latestID = 1
-        this.heartBeatInterval = setInterval(this.sendHeartBeats.bind(this), heartbeatIntervalSeconds*1000)
+    #sockets: Map<number, WebSocket>
+    #latestID: number
+    constructor() {
+        this.#sockets = new Map()
+        this.#latestID = 1
     }
 
-    sendHeartBeats() {
-        this.sockets.forEach((socket, key) => pong({}, socket))
-    }
-    
     getById(id: number): WebSocket | undefined {
-        return this.sockets.get(id)
+        return this.#sockets.get(id)
     }
 
     register(socket: WebSocket): number {
         increment(METRICS, "server.websocket.active", 1)
-        const id = this.latestID + 1
-        this.latestID += id
+        const id = this.#latestID + 1
+        this.#latestID += id
 
-        this.sockets.set(id, socket)
+        this.#sockets.set(id, socket)
 
         socket.onopen = () => console.log(new Date(), "socket opened");
 
@@ -180,8 +174,8 @@ class WebsocketManager {
         
         increment(METRICS, "server.websocket.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
-        this.sockets.get(id)?.close()
-        this.sockets.delete(id)
+        this.#sockets.get(id)?.close()
+        this.#sockets.delete(id)
     }
 }
 
