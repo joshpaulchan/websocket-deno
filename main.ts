@@ -279,7 +279,7 @@ const webSocketServer = Deno.listen({
 
 const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
 const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
-const channelPattern = Deno.env.get("REDIS_CHANNEL_PATTEN") ?? "*"
+const channelPattern = Deno.env.get("REDIS_CHANNEL_PATTERN") ?? "*"
 const redis = await connect({ hostname: redisHostname, port: redisPort });
 let publisher = await connect({ hostname: redisHostname, port: redisPort });
 // manage subscriptions better?
