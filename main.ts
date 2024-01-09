@@ -25,16 +25,6 @@ function getMetrics(_request: Request): Response {
     })
 }
 
-async function closeConnection(req: Request): Promise<Response> {
-    websocketManager.unregister(await req.json().id)
-    return new Response(null, {
-        status: 204,
-        headers: {
-            "Content-Type": "application/json"
-        }
-    })
-}
-
 // needs to be workable to actual broker tech (redis)
 // also needs to be able to subscribe other event streams (SSE) not just sockets
 class Broker<T> {
@@ -151,11 +141,7 @@ class WebsocketManager {
     sendHeartBeats() {
         this.sockets.forEach((socket, key) => pong({}, socket))
     }
-
-    drain() {
-        this.sockets.forEach((socket, key) => this.unregister(key))
-    }
-
+    
     getById(id: number): WebSocket | undefined {
         return this.sockets.get(id)
     }
@@ -180,16 +166,18 @@ class WebsocketManager {
 
         // TODO: unsubscribe all
         const unregister = this.unregister.bind(this)
-        socket.onerror = (e) => {
-            console.log(new Date(), "socket errored:", e)
-            unregister(id)
-        };
-        socket.onclose = () => unregister(id);
+        socket.onerror = (e) => unregister(id, e)
+        socket.onclose = () => unregister(id)
         return id;
     }
 
-    unregister(id: number): void {
-        console.log(new Date(), "socket closed")
+    unregister(id: number, e: Error | undefined): void {
+        if (e != null) {
+            console.log(new Date(), "socket errored:", e)
+        } else {
+            console.log(new Date(), "socket closed")
+        }
+        
         increment(METRICS, "server.websocket.active", -1)
         // maybe check state in: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState
         this.sockets.get(id)?.close()
@@ -275,8 +263,6 @@ export const handler = websocketMiddleware(httpRouter({
     "GET /healthz": getHealth,
     "GET /readiness": getReadiness,
     "GET /metrics": getMetrics,
-    "DELETE /connection": closeConnection,
-
     "GET /sse": sse,
 }, notFound))
 
