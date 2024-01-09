@@ -49,12 +49,14 @@ class Broker<T> {
         } else {
             this.subscribed.set(topic, [socket])
         }
+        console.log(new Date(), `added subscriber for ${topic}`)
     }
 
     unsubscribe(topic: String, socket: T): void {
         // probably a better way to optimize removal
         // TODO: fix this
         this.subscribed.set(topic, this.getSubscribers(topic).filter(s => s == socket))
+        console.log(new Date(), `removed subscriber for ${topic}`)
     }
 
     getSubscribers(topic: String): Array<T> {
@@ -158,7 +160,7 @@ class WebsocketManager {
         return this.sockets.get(id)
     }
 
-    register(socket: WebSocket) {
+    register(socket: WebSocket): number {
         increment(METRICS, "server.websockets.active", 1)
         const id = this.latestID + 1
         this.latestID += id
@@ -176,12 +178,14 @@ class WebsocketManager {
             "bye": closeOnReceivingEnd,
         }, relay)
 
+        // TODO: unsubscribe all
         const unregister = this.unregister.bind(this)
         socket.onerror = (e) => {
             console.log(new Date(), "socket errored:", e)
             unregister(id)
         };
         socket.onclose = () => unregister(id);
+        return id;
     }
 
     unregister(id: number): void {
@@ -193,16 +197,34 @@ class WebsocketManager {
     }
 }
 
-// NOTE: this could probably be a middleware that upgrades + register sockets based on header.
-function establishWebsocket(_request: Request): Response {
+const subscribeSocketToPath = new Boolean(Deno.env.get("CLIENT_AUTO_SUBSCRIBE_ON_PATH")) ?? true
+
+// handles upgrades to websocket protocol
+function websocketMiddleware(next) {
+    return async function handler(request: Request): Promise<Response> {
+        const handshakeResponse = establishWebsocket(request)
+        if (handshakeResponse != null) {
+            return handshakeResponse
+        }
+        return await next(request)
+    }
+}
+function establishWebsocket(_request: Request): Response | null {
+    if (_request.method != "GET") {
+        // websocket upgrade requests start as GETs; maybe this is handled by Deno already?
+        return null;
+    }
     const upgrade = _request.headers.get("upgrade") || "";
     if (upgrade.toLowerCase() != "websocket") {
-        return new Response("request isn't trying to upgrade to websocket.");
+        return null;
     }
 
     increment(METRICS, "server.tcp_conn.upgrades", 1)
     const { socket, response } = Deno.upgradeWebSocket(_request);
-    websocketManager.register(socket)
+    const socketId = websocketManager.register(socket)
+    if (subscribeSocketToPath) {
+        websocketBroker.subscribe(new URL(_request.url).pathname, socketId)
+    }
 
     return response;
 }
@@ -239,7 +261,7 @@ function notFound(_request: Request): Response {
 
 type RouterConfig = {
     [key: string]: ((request: Request) => Response) | ((request: Request) => Promise<Response>);
-  };
+};
 
   
 function httpRouter(routes: RouterConfig, defaultHandler) {
@@ -249,16 +271,14 @@ function httpRouter(routes: RouterConfig, defaultHandler) {
     }
 }
 
-export const handler = httpRouter({
+export const handler = websocketMiddleware(httpRouter({
     "GET /healthz": getHealth,
     "GET /readiness": getReadiness,
     "GET /metrics": getMetrics,
     "DELETE /connection": closeConnection,
 
-    // websocket upgrade requests start as GETs
-    "GET /websocket": establishWebsocket,
     "GET /sse": sse,
-}, notFound)
+}, notFound))
 
 const port = new Number(Deno.env.get("PORT") ?? 8080)
 const httpServer = Deno.serve({

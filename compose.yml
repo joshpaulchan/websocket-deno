@@ -10,7 +10,7 @@ services:
     environment:
       - REDIS_HOSTNAME=redis
     ports:
-      - "8080-8090:8080" # port range must be > than the replicas set, bc they'll all be unique
+      - "8080-8082:8080" # port range must be >= than the replicas set, bc they'll all be unique
     build:
       context: .
     deploy:
