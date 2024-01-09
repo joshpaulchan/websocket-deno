@@ -1,3 +1,4 @@
+import { connect } from "https://deno.land/x/redis/mod.ts";
 
 function getHealth(_request: Request): Response {
     return new Response(null)
@@ -85,6 +86,7 @@ function subscribe(e, socket, socketID) {
     }))
 }
 
+// TODO: nope still have to fix this
 function unsubscribe(e, socket, socketID) {
     const message = JSON.parse(e.data)
     websocketBroker.unsubscribe(message.attributes.topic, socketID)
@@ -103,7 +105,8 @@ function relay(e) {
 
     console.log("broadcasting to topic:", topic)
     
-    websocketBroker.getSubscribers(topic).forEach(id => websocketManager.getById(id)?.send(e.data))
+    // websocketBroker.getSubscribers(topic).forEach(id => websocketManager.getById(id)?.send(e.data))
+    publisher.publish(topic, e.data)
 }
 
 function echo(e, socket) {
@@ -255,9 +258,10 @@ export const handler = httpRouter({
     "GET /sse": sse,
 }, notFound)
 
+const port = Number(Deno.env.get("PORT", 8000))
 const httpServer = Deno.serve({
     hostname: "0.0.0.0",
-    port: 8080,
+    port,
     handler
 })
 
@@ -267,9 +271,19 @@ let websocketManager = new WebsocketManager()
 // - instrumenting some of the lower level bits
 const webSocketServer = Deno.listen({
     hostname: "0.0.0.0",
-    port: 8081,
+    port: port + 1,
     handle
 })
+
+const redis = await connect({ hostname: "127.0.0.1" });
+let publisher = await connect({ hostname: "127.0.0.1" });
+// manage subscriptions better
+let sub = await redis.psubscribe("*");
+(async function () {
+  for await (const { channel, message } of sub.receive()) {
+    websocketBroker.getSubscribers(channel).forEach(id => websocketManager.getById(id)?.send(message))
+  }
+})();
 
 async function handle(conn: Deno.Conn) {
     const httpConn = Deno.serveHttp(conn);
