@@ -295,12 +295,10 @@ function sse(_request: Request): Response {
     let id: number | undefined;
     const body = new ReadableStream({
         start(controller) {
-            increment(METRICS, "server.server_sent_events.active", 1)
             id = sseManager.register(controller)
             sseBroker.subscribe(new URL(_request.url).pathname, id)
         },
         cancel() {
-            increment(METRICS, "server.server_sent_events.active", -1)
             if (id) {
                 sseBroker.unsubscribe(new URL(_request.url).pathname, id)
                 sseManager.unregister(id, undefined)
