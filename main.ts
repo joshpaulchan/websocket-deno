@@ -13,7 +13,7 @@ function increment(map, key, amount = 1, _default = 0) {
     map.set(key, (map.get(key) ?? _default) + amount)
 }
 
-function getConnections(_request: Request): Response {
+function getMetrics(_request: Request): Response {
     const body = JSON.stringify({
         ts: new Date(),
         attributes: Object.fromEntries(METRICS.entries())
@@ -135,6 +135,7 @@ function messageRouter(socket, socketID, routes, defaultHandler) {
     }
 }
 
+// TODO: generalize to any potential listening stream (SSE or websockets)
 class WebsocketManager {
     sockets: Map<number, WebSocket>
     latestID: number
@@ -251,8 +252,8 @@ function httpRouter(routes: RouterConfig, defaultHandler) {
 export const handler = httpRouter({
     "GET /healthz": getHealth,
     "GET /readiness": getReadiness,
-    "GET /connections": getConnections,
-    "DELETE /connections": closeConnection,
+    "GET /metrics": getMetrics,
+    "DELETE /connection": closeConnection,
 
     // websocket upgrade requests start as GETs
     "GET /websocket": establishWebsocket,

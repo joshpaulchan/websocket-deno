@@ -16,3 +16,11 @@ deno test -A
 Redis
 
 You can connect using netcat (`nc`) and send commands like `PUBLISH <channel> <message>` OR `PSUBSCRIBE *` See https://redis.io/commands/subscribe/ for more commands.
+
+
+## Roadmap
+
+Smattering of things that might be interesting and/or useful:
+- support Kafka, RMQ, other shared state tech?
+- support SSE
+- upgrade routing to handle subscriptions
