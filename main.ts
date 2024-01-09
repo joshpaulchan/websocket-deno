@@ -277,7 +277,7 @@ const webSocketServer = Deno.listen({
 
 const redis = await connect({ hostname: "127.0.0.1" });
 let publisher = await connect({ hostname: "127.0.0.1" });
-// manage subscriptions better
+// manage subscriptions better?
 let sub = await redis.psubscribe("*");
 (async function () {
   for await (const { channel, message } of sub.receive()) {
