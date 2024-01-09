@@ -57,7 +57,7 @@ class Broker<T> {
 // TODO: connect to a bunch of remote event sources and on event, lookup relevant subscribers and emit to em
 let websocketBroker = new Broker<number>()
 
-function pong(e, socket) {
+function pong(e: MessageEvent, socket: WebSocket) {
     socket.send(JSON.stringify({
         type: "pong",
         attributes: {
@@ -66,7 +66,7 @@ function pong(e, socket) {
     }))
 }
 
-function subscribe(e, socket, socketID) {
+function subscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
     const message = JSON.parse(e.data)
     websocketBroker.subscribe(message.attributes.topic, socketID)
 
@@ -79,7 +79,7 @@ function subscribe(e, socket, socketID) {
 }
 
 // TODO: nope still have to fix this
-function unsubscribe(e, socket, socketID) {
+function unsubscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
     const message = JSON.parse(e.data)
     websocketBroker.unsubscribe(message.attributes.topic, socketID)
 
@@ -91,7 +91,7 @@ function unsubscribe(e, socket, socketID) {
     }))
 }
 
-function relay(e) {
+function relay(e: MessageEvent) {
     const message = JSON.parse(e.data)
     const topic = message?.attributes?.topic
 
@@ -101,15 +101,15 @@ function relay(e) {
     publisher.publish(topic, e.data)
 }
 
-function echo(e, socket) {
+function echo(e: MessageEvent, socket: WebSocket) {
     socket.send(e.data)
 }
 
-function closeOnReceivingEnd(e, socket) {
+function closeOnReceivingEnd(e: MessageEvent, socket: WebSocket) {
     socket.close()
 }
 
-function nackMessage(e, socket) {
+function nackMessage(e: MessageEvent, socket: WebSocket) {
     socket.send(JSON.stringify({
         type: "nack",
         attributes: {
@@ -118,9 +118,15 @@ function nackMessage(e, socket) {
     }))
 }
 
+interface MessageReceiver<T> {
+    (e: MessageEvent): void
+    (e: MessageEvent, receiver: T): void
+    (e: MessageEvent, receiver: T, id: number): void
+}
+
 // maybe I should be passing socket ID around instead and interfacing thru manager? 🤷
-function messageRouter(socket: WebSocket, socketID: number, routes: Object, defaultHandler) {
-    return function onMessage(e) {
+function messageRouter(socket: WebSocket, socketID: number, routes: Object, defaultHandler: MessageReceiver<WebSocket>) {
+    return function onMessage(e: MessageEvent) {
         // gotta make sure content negotiation is in place from extensions / protocol
         const message = JSON.parse(e.data)
         return (routes[message.type] ?? defaultHandler)(e, socket, socketID)
