@@ -1,3 +1,4 @@
+This repository contains a tiny, flexible service that can be used to implement public, real-time message. It's currently a thin layer built over Redis Pub Sub (and would be nice to support other MQ / event stream technologies like kafka) and supports Websockets (and a half baked SSE implementation)
 
 ## Quickstart
 
