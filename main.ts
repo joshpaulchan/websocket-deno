@@ -319,9 +319,10 @@ let sseManager : Manager<number, ReadableStreamDefaultController> = new ServerSe
 
 const redisHostname = Deno.env.get("REDIS_HOSTNAME") ?? "127.0.0.1"
 const redisPort = Deno.env.get("REDIS_PORT") ?? "6379"
+const redisDb = Deno.env.get("REDIS_DB") ?? "0"
 const channelPattern = Deno.env.get("REDIS_CHANNEL_PATTERN") ?? "*"
-const redis = await connect({ hostname: redisHostname, port: redisPort });
-let publisher = await connect({ hostname: redisHostname, port: redisPort });
+const redis = await connect({ hostname: redisHostname, port: redisPort, db: redisDb });
+let publisher = await connect({ hostname: redisHostname, port: redisPort, db: redisDb });
 // manage subscriptions better?
 let sub = await redis.psubscribe(channelPattern);
 
