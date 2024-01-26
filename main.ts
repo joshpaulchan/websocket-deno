@@ -69,7 +69,7 @@ function pong(e: MessageEvent, socket: WebSocket) {
 
 function subscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
     const message = JSON.parse(e.data)
-    websocketBroker.subscribe(message.attributes.topic, socketID)
+    websocketBroker.subscribe(message.destination, socketID)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -82,7 +82,7 @@ function subscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
 // TODO: nope still have to fix this
 function unsubscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
     const message = JSON.parse(e.data)
-    websocketBroker.unsubscribe(message.attributes.topic, socketID)
+    websocketBroker.unsubscribe(message.destination, socketID)
 
     socket.send(JSON.stringify({
         type: "ack",
@@ -94,12 +94,12 @@ function unsubscribe(e: MessageEvent, socket: WebSocket, socketID: number) {
 
 function relay(e: MessageEvent) {
     const message = JSON.parse(e.data)
-    const topic = message?.attributes?.topic
+    const destination = message?.destination
 
-    console.log("broadcasting to topic:", topic)
+    console.log("broadcasting to destination:", destination)
     
     // websocketBroker.getSubscribers(topic).forEach(id => websocketManager.getById(id)?.send(e.data))
-    publisher.publish(topic, e.data)
+    publisher.publish(destination, e.data)
 }
 
 function echo(e: MessageEvent, socket: WebSocket) {
